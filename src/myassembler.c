@@ -15,8 +15,31 @@ static void show_usage(FILE *out) {
 }
 
 void do_cmd(const char *label, const char *cmd, const char *arg, int line_num) {
-  fprintf(stderr, "%s: do_cmd: line_num=%d label=%s cmd=%s arg=[%s]\n",
+  fprintf(stderr, "%s: do_cmd: line_num=%03d label=[%-15s] cmd=[%-10s] arg=[%s]\n",
 	  prog_name, line_num, label, cmd, arg);
+}
+
+char *first_space(char *str) {
+  for (;;++str) {
+    int c = *str;
+    if (c == '\0')
+      return NULL;
+    if (isspace(c))
+      break;
+  }
+  return str;
+}
+
+char *first_non_space(char *str) {
+  for (;;++str) {
+    int c = *str;
+    if (c == '\0')
+      return NULL;
+    if (isspace(c))
+      continue;
+    break;
+  }
+  return str;
 }
 
 static void parse_line(const char *filename, const char* line_orig, int line_num) {
@@ -70,9 +93,46 @@ static void parse_line(const char *filename, const char* line_orig, int line_num
 
   char *label = NULL;
   char *cmd = NULL;
-  //char *arg = NULL;
+  char *arg = NULL;
 
-  do_cmd(label, cmd, line_tmp, line_num);
+  char *first = first_non_space(line_tmp);
+  if (first == NULL) {
+    /* blank line */
+    return;
+  }
+
+  char *first_end = first_space(first);
+  if (first_end != NULL) {
+    *first_end = '\0';
+  }
+
+  int first_size = strlen(first);
+  if (first[first_size-1] == ':') {
+    label = first;
+  }
+  else {
+    cmd = first;
+  }
+
+  if (first_end != NULL) {
+    char *sec = first_non_space(first_end + 1);
+    if (sec != NULL) {
+      if (cmd == NULL) {
+	cmd = sec;
+
+	char *sec_end = first_space(sec);
+	if (sec_end != NULL) {
+	  *sec_end = '\0';
+	  arg = first_non_space(sec_end + 1);
+	}
+      }
+      else {
+	arg = sec;
+      }
+    }
+  }
+
+  do_cmd(label, cmd, arg, line_num);
 }
 
 static void assemble(const char *filename) {
