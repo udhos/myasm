@@ -7,6 +7,8 @@
 #include <assert.h>
 
 #define COMMENT_SEP ';'
+#define STRING_SEP '\''
+#define ESCAPE_SEP '\\'
 
 struct label {
   char *name;
@@ -205,7 +207,7 @@ char *first_non_space(char *str) {
   size: string original length
   returns: new string length
 */
-int trim_right(char *buf, int size) {
+static int trim_right(char *buf, int size) {
 
   for (; size > 0; --size) {
     int last = size - 1;
@@ -220,6 +222,62 @@ int trim_right(char *buf, int size) {
   return size;
 }
 
+/*
+  strip comment from line
+  but not if comment delimiter is inside quoted string
+ */
+static int strip_comment(char *buf, int size) {
+  int i;
+  int status = 0; /* 0=outside_string 1=inside_string 2=inside_string_escaped_char */
+
+  for (i = 0; i < size; ++i) {
+    int c = buf[i];
+    if (c == '\0')
+      return i; /* found end of string */
+
+    if (status == 0) {
+      /* outside string */
+      if (c == STRING_SEP) {
+	/* found string */
+	status = 1;
+	continue;
+      }
+      if (c == COMMENT_SEP) {
+	/* found comment separator */
+	buf[i] = '\0'; /* force string termination at comment char */
+	return i;
+      }
+      continue;
+    }
+
+    if (status == 1) {
+      /* inside string */
+      if (c == STRING_SEP) {
+	/* string end */
+	status = 0;
+	continue;
+      }
+      if (c == ESCAPE_SEP) {
+	/* found escape char: ignore next char */
+	status = 2;
+	continue;
+      }
+      continue;
+    }
+
+    if (status == 2) {
+      /* inside string but escaped char */
+      status = 1; /* back to inside string */
+      continue;
+    }
+
+    assert(0);
+  }
+
+  /* unchanged */
+
+  return size;
+}
 
 static void parse_line(const char *input_filename, const char* line_orig, int line_num) {
 #if 0
@@ -247,11 +305,7 @@ static void parse_line(const char *input_filename, const char* line_orig, int li
   assert(line_size == strlen(line_tmp));
 
   /* cut off comments */
-  char *comment = strchr(line_tmp, COMMENT_SEP);
-  if (comment != NULL) {
-    *comment = '\0'; /* force string termination at comment char */
-    line_size = comment - line_tmp;
-  }
+  line_size = strip_comment(line_tmp, line_size);
 
   /* remove blanks from line_tmp ending */
   line_size = trim_right(line_tmp, line_size);

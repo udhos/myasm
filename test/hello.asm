@@ -1,5 +1,5 @@
 section .data
-	hello:     db 'Hello world!',10    ; 'Hello world!' plus a linefeed character
+	hello:     db 'Hello ; \' ; world!',10    ; 'Hello world!' plus a linefeed character
 	helloLen:  equ $-hello             ; Length of the 'Hello world!' string
 	                                   ; (I'll explain soon)
 
