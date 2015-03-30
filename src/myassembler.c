@@ -16,7 +16,7 @@ struct label {
   int line_num;
 };
 
-/* label_strcmp: compare keywords ignoring case */
+/* label_strcmp: compare labels ignoring case */
 int (*label_strcmp)(const char *s1, const char *s2) = strcasecmp;
 
 struct label **label_table;
