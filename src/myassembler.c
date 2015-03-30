@@ -145,6 +145,25 @@ struct cmd* cmd_find(const char *cmd_name) {
   return NULL;
 }
 
+/* returns: non-zero means bad syntax */
+static int check_label_syntax(const char *label) {
+  if (!isalpha(label[0]) && label[0] != '_')
+      return 1;
+
+  int i;
+  int size = strlen(label);
+  for (i = 1; i < size; ++i) {
+    int c = label[i];
+    if (isalnum(c))
+      continue;
+    if (c == '_')
+      continue;
+    return 2;
+  }
+
+  return 0; /* label syntax ok */
+}
+
 /* handle tuple: label,cmd,arg */
 static void do_cmd(const char *label, const char *cmd, const char *arg, int line_num) {
 #if 0
@@ -153,8 +172,15 @@ static void do_cmd(const char *label, const char *cmd, const char *arg, int line
 #endif
 
   /* save label into table, if any */
-  if (label != NULL) 
+  if (label != NULL)  {
+    if (check_label_syntax(label)) {
+      fprintf(stderr, "%s: bad label=[%s] syntax at line_num=%d\n",
+	      prog_name, label, line_num);
+      exit(1);
+    }
+
     label_add(label, line_num);
+  }
 
   if (cmd == NULL) {
     /* line with label only, no command */
@@ -338,6 +364,7 @@ static void parse_line(const char *input_filename, const char* line_orig, int li
   /* first word is label or command? */
   if (first[first_size-1] == ':') {
     /* first word is label */
+    first[first_size-1] = '\0'; /* drop colon from label */
     label = first;
   }
   else {
