@@ -14,23 +14,37 @@ struct label {
   int line_num;
 };
 
+/* label_strcmp: compare keywords ignoring case */
+int (*label_strcmp)(const char *s1, const char *s2) = strcasecmp;
+
 struct label **label_table;
 int label_table_cap = 0;
 int label_table_size = 0;
+int label_address_offset = 0;
+
+/* update current address offset according size of generated instruction */
+static void address_inc(int size) {
+  label_address_offset += size;
+}
 
 struct cmd {
   char *keyword;
   void (*run)(const char *arg, int line_num);
 };
 
+/* cmd_strcmp: compare keywords ignoring case */
+int (*cmd_strcmp)(const char *s1, const char *s2) = strcasecmp;
+
 const char *prog_name;
 
 static void cmd_db(const char *arg, int line_num) {
   fprintf(stderr, "%s: cmd_db: arg=[%s]\n", prog_name, arg);
+  address_inc(1); /* FIXME */
 }
 
 static void cmd_equ(const char *arg, int line_num) {
   fprintf(stderr, "%s: cmd_equ: arg=[%s]\n", prog_name, arg);
+  address_inc(2); /* FIXME */
 }
 
 static void cmd_global(const char *arg, int line_num) {
@@ -39,10 +53,12 @@ static void cmd_global(const char *arg, int line_num) {
 
 static void cmd_int(const char *arg, int line_num) {
   fprintf(stderr, "%s: cmd_int: arg=[%s]\n", prog_name, arg);
+  address_inc(3); /* FIXME */
 }
 
 static void cmd_mov(const char *arg, int line_num) {
   fprintf(stderr, "%s: cmd_mov: arg=[%s]\n", prog_name, arg);
+  address_inc(4); /* FIXME */
 }
 
 static void cmd_section(const char *arg, int line_num) {
@@ -74,7 +90,7 @@ static void show_label_table() {
 struct label* label_find(const char *label_name) {
   int i;
   for (i = 0; i < label_table_size; ++i) {
-    if (!strcmp(label_name, label_table[i]->name))
+    if (!label_strcmp(label_name, label_table[i]->name))
       return label_table[i];
   }
   return NULL;
@@ -94,20 +110,21 @@ static void label_add(const char *label_name, int line_num) {
   /* grow array? */
   if (label_table_size >= label_table_cap) {
     if (label_table_cap < 1)
-      label_table_cap = 10;
+      label_table_cap = 100; /* starts with 100 elements */
     else
-      label_table_cap <<= 1;
+      label_table_cap <<= 1; /* then double size when needed */
     label_table = realloc(label_table, label_table_cap);
   }
 
   struct label *new_label = malloc(sizeof(*new_label));
   assert(new_label != NULL);
 
+  /* new label data */
   new_label->name = strdup(label_name);
-  new_label->offset = -1;
+  new_label->offset = label_address_offset;
   new_label->line_num = line_num;
 
-  /* push label */
+  /* append new label to array */
   label_table[label_table_size] = new_label;
   ++label_table_size;
 
@@ -120,7 +137,7 @@ struct cmd* cmd_find(const char *cmd_name) {
   int cmd_table_size = sizeof(cmd_table) / sizeof(struct cmd);
   for (i = 0; i < cmd_table_size; ++i) {
     struct cmd *c = &cmd_table[i];
-    if (!strcmp(cmd_name, c->keyword))
+    if (!cmd_strcmp(cmd_name, c->keyword))
       return c;
   }
   return NULL;
@@ -204,10 +221,10 @@ int trim_right(char *buf, int size) {
 }
 
 
-static void parse_line(const char *filename, const char* line_orig, int line_num) {
+static void parse_line(const char *input_filename, const char* line_orig, int line_num) {
 #if 0
-  fprintf(stderr, "%s: filename=%s line_num=%d line=[%s]n",
-	  prog_name, filename, line_num, line_orig);
+  fprintf(stderr, "%s: input_filename=%s line_num=%d line=[%s]n",
+	  prog_name, input_filename, line_num, line_orig);
 #endif
 
   char line_tmp[1000];
@@ -303,16 +320,16 @@ static void parse_line(const char *filename, const char* line_orig, int line_num
   do_cmd(label, cmd, arg, line_num);
 }
 
-static void scan_input(const char *filename) {
+static void scan_input(const char *input_filename) {
   FILE *input;
   char buf[1000];
   int err;
 
-  input = fopen(filename, "r");  /* open for reading */
+  input = fopen(input_filename, "r");  /* open for reading */
   if (input == NULL) {
     err = errno;
     fprintf(stderr, "%s: could not open: %s: errno=%d: %s\n",
-	    prog_name, filename, err, strerror(err));
+	    prog_name, input_filename, err, strerror(err));
     exit(1);
   }
 
@@ -320,14 +337,14 @@ static void scan_input(const char *filename) {
   int line_num = 0;
   while(fgets(buf, sizeof(buf), input) != NULL) {
     ++line_num;
-    parse_line(filename, buf, line_num);
+    parse_line(input_filename, buf, line_num);
   }
 
   /* haven't we hit an end-of-file ? */
   err = errno;
   if (!feof(input)) {
     fprintf(stderr, "%s: error reading: %s: errno=%d: %s\n",
-	    prog_name, filename, err, strerror(err));
+	    prog_name, input_filename, err, strerror(err));
     exit(1);
   }
 
@@ -336,13 +353,13 @@ static void scan_input(const char *filename) {
 
 static void show_usage(FILE *out) {
   fprintf(out,
-          "usage: %s [-h] filename\n",
+          "usage: %s [-h] input_filename\n",
 	  prog_name);
 }
 
 int main(int argc, char *argv[]) {
   int i;
-  const char *filename = NULL;
+  const char *input_filename = NULL;
 
   prog_name = argv[0];
 
@@ -357,23 +374,23 @@ int main(int argc, char *argv[]) {
       exit(0);
     }
 
-    if (filename != NULL) {
-      fprintf(stderr, "%s: filename redefinition old=%s new=%s\n",
-	      prog_name, filename, arg);
+    if (input_filename != NULL) {
+      fprintf(stderr, "%s: input_filename redefinition old=%s new=%s\n",
+	      prog_name, input_filename, arg);
       exit(1);
     }
 
-    filename = arg;
+    input_filename = arg;
   }
 
-  if (filename == NULL) {
-      fprintf(stderr, "%s: missing filename\n",
+  if (input_filename == NULL) {
+      fprintf(stderr, "%s: missing input_filename\n",
 	      prog_name);
     show_usage(stdout);
     exit(1);
   }
 
-  scan_input(filename);
+  scan_input(input_filename);
   show_label_table();
 
   exit(0);
