@@ -417,8 +417,6 @@ int main(int argc, char *argv[]) {
 
   prog_name = argv[0];
 
-  assert(sizeof(cmd_table) / sizeof(struct cmd) == 6);
-
   /* scan command-line arguments */
   for (i = 1; i < argc; ++i) {
     const char *arg = argv[i];
