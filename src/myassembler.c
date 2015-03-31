@@ -401,7 +401,7 @@ static void parse_line(const char *input_filename, const char* line_orig, int li
   do_cmd(label, cmd, arg, line_num);
 }
 
-static void scan_input(const char *input_filename) {
+static void scan_input(const char *input_filename, const char *output_filename) {
   FILE *input;
   char buf[1000];
   int err;
@@ -434,13 +434,15 @@ static void scan_input(const char *input_filename) {
 
 static void show_usage(FILE *out) {
   fprintf(out,
-          "usage: %s [-h] input_filename\n",
+          "usage: %s [-h] input_filename [output_filename]\n",
 	  prog_name);
 }
 
 int main(int argc, char *argv[]) {
   int i;
   const char *input_filename = NULL;
+  const char *output_filename = NULL;
+  char out_fname[1000];
 
   prog_name = argv[0];
 
@@ -454,9 +456,15 @@ int main(int argc, char *argv[]) {
     }
 
     if (input_filename != NULL) {
-      fprintf(stderr, "%s: input_filename redefinition old=%s new=%s\n",
-	      prog_name, input_filename, arg);
-      exit(1);
+
+      if (output_filename != NULL) {
+	fprintf(stderr, "%s: unexpected command-line argument: %s\n",
+		prog_name, arg);
+	exit(1);
+      }
+
+      output_filename = arg;
+      continue;
     }
 
     input_filename = arg;
@@ -469,7 +477,28 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-  scan_input(input_filename);
+  if (output_filename == NULL) {
+    int towrite = strlen(input_filename) + 4;
+    int wr = snprintf(out_fname, sizeof(out_fname), "%s.hex", input_filename);
+    if ((wr < 1) || (wr != towrite) || (wr >= sizeof(out_fname))) {
+      fprintf(stderr, "%s: could not assign default output_filename: needed_size=%d buf_size=%d\n",
+	      prog_name, towrite + 1, sizeof(out_fname));
+      exit(1);
+    }
+
+    output_filename = out_fname;
+  }
+
+  if (!strcmp(input_filename, output_filename)) {
+    fprintf(stderr, "%s: input_filename=%s can't match output_filename=%s\n",
+	    prog_name, input_filename, output_filename);
+    exit(1);
+  }
+
+  fprintf(stderr, "%s: input_filename=%s output_filename=%s\n",
+	  prog_name, input_filename, output_filename);
+
+  scan_input(input_filename, output_filename);
   show_label_table();
 
   exit(0);
